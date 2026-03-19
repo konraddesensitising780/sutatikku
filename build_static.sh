@@ -2,7 +2,7 @@
 set -e
 
 # Name of the resulting binary
-OUTPUT_BIN="sutatikku-static"
+OUTPUT_BIN="sutatikku"
 
 echo "Building static Sutatikku using Docker (Alpine/musl)..."
 
