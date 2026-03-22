@@ -1,22 +1,22 @@
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
+use flate2::read::GzDecoder;
+use log::debug;
+use nix::sys::wait::{waitpid, WaitStatus};
+use nix::unistd::{self, fork, ForkResult};
+use std::collections::HashMap;
+use std::ffi::CString;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
-use std::ffi::CString;
-use tempfile::tempdir;
-use tar::Archive;
-use flate2::read::GzDecoder;
-use std::os::unix::process::CommandExt;
-use std::process::Command;
-use nix::unistd::{self, fork, ForkResult};
-use nix::sys::wait::{waitpid, WaitStatus};
-use log::debug;
 use std::os::fd::{AsFd, AsRawFd};
-use std::collections::HashMap;
+use std::os::unix::process::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use tar::Archive;
+use tempfile::tempdir;
 
 use crate::builder::BundleConfig;
-use crate::seccomp::{setup_seccomp_hook, run_seccomp_monitor};
 use crate::monitor::RedirectionMonitor;
+use crate::seccomp::{run_seccomp_monitor, setup_seccomp_hook};
 
 pub struct Runner {
     exe_path: PathBuf,
@@ -63,7 +63,7 @@ impl Runner {
 
     pub fn run_with_monitor(&self) -> Result<()> {
         let (payload_offset, payload_size) = self.find_payload()?;
-        
+
         let config = {
             let mut file = fs::File::open(&self.exe_path)?;
             file.seek(SeekFrom::Start(payload_offset))?;
@@ -99,7 +99,7 @@ impl Runner {
         match unsafe { fork()? } {
             ForkResult::Child => {
                 drop(parent_sock);
-                
+
                 let syscalls_to_hook = vec![
                     libc::SYS_open as i32,
                     libc::SYS_openat as i32,
@@ -125,17 +125,29 @@ impl Runner {
                     debug!("Runner: Preparing in-memory exec...");
                     let interp_data = if let Some(ref interp) = config.interpreter_path {
                         let relative_interp = interp.strip_prefix("/").unwrap();
-                        Some(bundle_root.get_file(relative_interp).ok_or_else(|| anyhow!("Interpreter not found in memory"))?)
+                        Some(
+                            bundle_root
+                                .get_file(relative_interp)
+                                .ok_or_else(|| anyhow!("Interpreter not found in memory"))?,
+                        )
                     } else {
                         None
                     };
 
-                    let entry_data = bundle_root.get_file(relative_entry).ok_or_else(|| anyhow!("Entry binary not found in memory"))?;
-                    let entry_fd = nix::sys::memfd::memfd_create(&CString::new("entry")?, nix::sys::memfd::MemFdCreateFlag::empty())?;
+                    let entry_data = bundle_root
+                        .get_file(relative_entry)
+                        .ok_or_else(|| anyhow!("Entry binary not found in memory"))?;
+                    let entry_fd = nix::sys::memfd::memfd_create(
+                        &CString::new("entry")?,
+                        nix::sys::memfd::MemFdCreateFlag::empty(),
+                    )?;
                     unistd::write(&entry_fd, entry_data)?;
 
                     if let Some(data) = interp_data {
-                        let interp_fd = nix::sys::memfd::memfd_create(&CString::new("interpreter")?, nix::sys::memfd::MemFdCreateFlag::empty())?;
+                        let interp_fd = nix::sys::memfd::memfd_create(
+                            &CString::new("interpreter")?,
+                            nix::sys::memfd::MemFdCreateFlag::empty(),
+                        )?;
                         unistd::write(&interp_fd, data)?;
 
                         let interp_path = format!("/proc/self/fd/{}", interp_fd.as_raw_fd());
@@ -181,9 +193,16 @@ impl Runner {
             ForkResult::Parent { child } => {
                 drop(child_sock);
                 let fds = parent_sock.recv_fd()?;
-                let notif_fd = fds.into_iter().next().ok_or_else(|| anyhow!("No FD received"))?;
-                
-                let monitor = RedirectionMonitor::new_with_root(child.as_raw() as u32, bundle_root, config.prefer_host);
+                let notif_fd = fds
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| anyhow!("No FD received"))?;
+
+                let monitor = RedirectionMonitor::new_with_root(
+                    child.as_raw() as u32,
+                    bundle_root,
+                    config.prefer_host,
+                );
                 parent_sock.ping()?;
 
                 let _ = run_seccomp_monitor(notif_fd.as_fd(), |req| {
@@ -211,11 +230,11 @@ impl Runner {
         let mut file = fs::File::open(&self.exe_path)?;
         let total_size = file.metadata()?.len();
         file.seek(SeekFrom::End(-16))?;
-        
+
         let mut size_bytes = [0u8; 8];
         file.read_exact(&mut size_bytes)?;
         let payload_size = u64::from_le_bytes(size_bytes);
-        
+
         let payload_offset = total_size - 16 - payload_size;
         Ok((payload_offset, payload_size))
     }

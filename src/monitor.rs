@@ -1,16 +1,16 @@
 use anyhow::Result;
+use bytemuck::NoUninit;
 use libseccomp::{ScmpNotifReq, ScmpNotifResp, ScmpNotifRespFlags};
 use log::{debug, warn};
 use nix::errno::Errno;
+use std::ffi::CString;
 use std::os::fd::{AsRawFd, RawFd};
 use std::path::{Path, PathBuf};
-use std::ffi::CString;
-use bytemuck::NoUninit;
 
-use crate::seccomp::{read_process_path, inject_fd_and_respond};
 use crate::runner::BundleRoot;
-use std::sync::Mutex;
+use crate::seccomp::{inject_fd_and_respond, read_process_path};
 use std::collections::HashSet;
+use std::sync::Mutex;
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy)]
@@ -66,8 +66,16 @@ pub struct RedirectionMonitor {
 }
 
 impl RedirectionMonitor {
-    pub fn new_with_root(target_pid: u32, bundle_root: BundleRoot, prefer_host: HashSet<PathBuf>) -> Self {
-        Self { target_pid, bundle_root, prefer_host }
+    pub fn new_with_root(
+        target_pid: u32,
+        bundle_root: BundleRoot,
+        prefer_host: HashSet<PathBuf>,
+    ) -> Self {
+        Self {
+            target_pid,
+            bundle_root,
+            prefer_host,
+        }
     }
 
     pub fn handle_notification(&self, req: &ScmpNotifReq, notif_fd: RawFd) {
@@ -87,7 +95,8 @@ impl RedirectionMonitor {
             }
             Err(e) => {
                 warn!("Error handling syscall: {:?}", e);
-                let resp = ScmpNotifResp::new_error(req.id, libc::EINVAL, ScmpNotifRespFlags::empty());
+                let resp =
+                    ScmpNotifResp::new_error(req.id, libc::EINVAL, ScmpNotifRespFlags::empty());
                 let _ = resp.respond(notif_fd);
             }
         }
@@ -122,7 +131,14 @@ impl RedirectionMonitor {
         Ok(false)
     }
 
-    fn handle_open(&self, req: &ScmpNotifReq, notif_fd: RawFd, path_arg: usize, flags_arg: usize, mode_arg: usize) -> Result<bool> {
+    fn handle_open(
+        &self,
+        req: &ScmpNotifReq,
+        notif_fd: RawFd,
+        path_arg: usize,
+        flags_arg: usize,
+        mode_arg: usize,
+    ) -> Result<bool> {
         let path = read_process_path(req.pid, req.data.args[path_arg])?;
         if let Some(relative) = self.get_redirection_path(&path) {
             match &self.bundle_root {
@@ -132,19 +148,40 @@ impl RedirectionMonitor {
                         debug!("Redirecting open {:?} -> {:?}", path, redirected);
                         let oflags = req.data.args[flags_arg] as i32;
                         let mode = req.data.args[mode_arg] as u32;
-                        let fd = nix::fcntl::open(&redirected, nix::fcntl::OFlag::from_bits_truncate(oflags), nix::sys::stat::Mode::from_bits_truncate(mode))?;
-                        inject_fd_and_respond(unsafe { std::os::fd::BorrowedFd::borrow_raw(notif_fd) }, req.id, fd, 0)?;
+                        let fd = nix::fcntl::open(
+                            &redirected,
+                            nix::fcntl::OFlag::from_bits_truncate(oflags),
+                            nix::sys::stat::Mode::from_bits_truncate(mode),
+                        )?;
+                        inject_fd_and_respond(
+                            unsafe { std::os::fd::BorrowedFd::borrow_raw(notif_fd) },
+                            req.id,
+                            fd,
+                            0,
+                        )?;
                         let _ = unsafe { libc::close(fd) };
                         return Ok(true);
                     }
                 }
                 BundleRoot::InMemory(_) => {
                     if let Some(data) = self.bundle_root.get_file(&relative) {
-                        debug!("Redirecting open {:?} to in-memory data ({} bytes)", path, data.len());
-                        let mem_fd = nix::sys::memfd::memfd_create(&CString::new("bundled_file")?, nix::sys::memfd::MemFdCreateFlag::MFD_CLOEXEC)?;
+                        debug!(
+                            "Redirecting open {:?} to in-memory data ({} bytes)",
+                            path,
+                            data.len()
+                        );
+                        let mem_fd = nix::sys::memfd::memfd_create(
+                            &CString::new("bundled_file")?,
+                            nix::sys::memfd::MemFdCreateFlag::MFD_CLOEXEC,
+                        )?;
                         nix::unistd::write(&mem_fd, data)?;
                         nix::unistd::lseek(mem_fd.as_raw_fd(), 0, nix::unistd::Whence::SeekSet)?;
-                        inject_fd_and_respond(unsafe { std::os::fd::BorrowedFd::borrow_raw(notif_fd) }, req.id, mem_fd.as_raw_fd(), 0)?;
+                        inject_fd_and_respond(
+                            unsafe { std::os::fd::BorrowedFd::borrow_raw(notif_fd) },
+                            req.id,
+                            mem_fd.as_raw_fd(),
+                            0,
+                        )?;
                         return Ok(true);
                     }
                 }
@@ -153,7 +190,15 @@ impl RedirectionMonitor {
         Ok(false)
     }
 
-    fn handle_openat(&self, req: &ScmpNotifReq, notif_fd: RawFd, _dirfd_arg: usize, path_arg: usize, flags_arg: usize, mode_arg: usize) -> Result<bool> {
+    fn handle_openat(
+        &self,
+        req: &ScmpNotifReq,
+        notif_fd: RawFd,
+        _dirfd_arg: usize,
+        path_arg: usize,
+        flags_arg: usize,
+        mode_arg: usize,
+    ) -> Result<bool> {
         let path = read_process_path(req.pid, req.data.args[path_arg])?;
         if path.is_absolute() {
             if let Some(relative) = self.get_redirection_path(&path) {
@@ -164,19 +209,44 @@ impl RedirectionMonitor {
                             debug!("Redirecting openat {:?} -> {:?}", path, redirected);
                             let oflags = req.data.args[flags_arg] as i32;
                             let mode = req.data.args[mode_arg] as u32;
-                            let fd = nix::fcntl::open(&redirected, nix::fcntl::OFlag::from_bits_truncate(oflags), nix::sys::stat::Mode::from_bits_truncate(mode))?;
-                            inject_fd_and_respond(unsafe { std::os::fd::BorrowedFd::borrow_raw(notif_fd) }, req.id, fd, 0)?;
+                            let fd = nix::fcntl::open(
+                                &redirected,
+                                nix::fcntl::OFlag::from_bits_truncate(oflags),
+                                nix::sys::stat::Mode::from_bits_truncate(mode),
+                            )?;
+                            inject_fd_and_respond(
+                                unsafe { std::os::fd::BorrowedFd::borrow_raw(notif_fd) },
+                                req.id,
+                                fd,
+                                0,
+                            )?;
                             let _ = unsafe { libc::close(fd) };
                             return Ok(true);
                         }
                     }
                     BundleRoot::InMemory(_) => {
                         if let Some(data) = self.bundle_root.get_file(&relative) {
-                            debug!("Redirecting openat {:?} to in-memory data ({} bytes)", path, data.len());
-                            let mem_fd = nix::sys::memfd::memfd_create(&CString::new("bundled_file")?, nix::sys::memfd::MemFdCreateFlag::MFD_CLOEXEC)?;
+                            debug!(
+                                "Redirecting openat {:?} to in-memory data ({} bytes)",
+                                path,
+                                data.len()
+                            );
+                            let mem_fd = nix::sys::memfd::memfd_create(
+                                &CString::new("bundled_file")?,
+                                nix::sys::memfd::MemFdCreateFlag::MFD_CLOEXEC,
+                            )?;
                             nix::unistd::write(&mem_fd, data)?;
-                            nix::unistd::lseek(mem_fd.as_raw_fd(), 0, nix::unistd::Whence::SeekSet)?;
-                            inject_fd_and_respond(unsafe { std::os::fd::BorrowedFd::borrow_raw(notif_fd) }, req.id, mem_fd.as_raw_fd(), 0)?;
+                            nix::unistd::lseek(
+                                mem_fd.as_raw_fd(),
+                                0,
+                                nix::unistd::Whence::SeekSet,
+                            )?;
+                            inject_fd_and_respond(
+                                unsafe { std::os::fd::BorrowedFd::borrow_raw(notif_fd) },
+                                req.id,
+                                mem_fd.as_raw_fd(),
+                                0,
+                            )?;
                             return Ok(true);
                         }
                     }
@@ -186,7 +256,15 @@ impl RedirectionMonitor {
         Ok(false)
     }
 
-    fn handle_statat(&self, req: &ScmpNotifReq, notif_fd: RawFd, _dirfd_arg: usize, path_arg: usize, statbuf_arg: usize, _flags_arg: usize) -> Result<bool> {
+    fn handle_statat(
+        &self,
+        req: &ScmpNotifReq,
+        notif_fd: RawFd,
+        _dirfd_arg: usize,
+        path_arg: usize,
+        statbuf_arg: usize,
+        _flags_arg: usize,
+    ) -> Result<bool> {
         let path = read_process_path(req.pid, req.data.args[path_arg])?;
         if path.is_absolute() {
             if let Some(relative) = self.get_redirection_path(&path) {
@@ -196,7 +274,11 @@ impl RedirectionMonitor {
                         if redirected.exists() {
                             debug!("Redirecting stat {:?} -> {:?}", path, redirected);
                             let stat_res = nix::sys::stat::stat(&redirected)?;
-                            crate::seccomp::write_process_memory(req.pid, req.data.args[statbuf_arg], bytemuck::bytes_of(&StatBytes(stat_res)))?;
+                            crate::seccomp::write_process_memory(
+                                req.pid,
+                                req.data.args[statbuf_arg],
+                                bytemuck::bytes_of(&StatBytes(stat_res)),
+                            )?;
                             let resp = ScmpNotifResp::new(req.id, 0, 0, 0);
                             resp.respond(notif_fd)?;
                             return Ok(true);
@@ -204,11 +286,22 @@ impl RedirectionMonitor {
                     }
                     BundleRoot::InMemory(_) => {
                         if let Some(data) = self.bundle_root.get_file(&relative) {
-                            debug!("Emulating stat for in-memory {:?} ({} bytes)", path, data.len());
-                            let mem_fd = nix::sys::memfd::memfd_create(&CString::new("stat_fake")?, nix::sys::memfd::MemFdCreateFlag::MFD_CLOEXEC)?;
+                            debug!(
+                                "Emulating stat for in-memory {:?} ({} bytes)",
+                                path,
+                                data.len()
+                            );
+                            let mem_fd = nix::sys::memfd::memfd_create(
+                                &CString::new("stat_fake")?,
+                                nix::sys::memfd::MemFdCreateFlag::MFD_CLOEXEC,
+                            )?;
                             nix::unistd::write(&mem_fd, data)?;
                             let stat_res = nix::sys::stat::fstat(mem_fd.as_raw_fd())?;
-                            crate::seccomp::write_process_memory(req.pid, req.data.args[statbuf_arg], bytemuck::bytes_of(&StatBytes(stat_res)))?;
+                            crate::seccomp::write_process_memory(
+                                req.pid,
+                                req.data.args[statbuf_arg],
+                                bytemuck::bytes_of(&StatBytes(stat_res)),
+                            )?;
                             let resp = ScmpNotifResp::new(req.id, 0, 0, 0);
                             resp.respond(notif_fd)?;
                             return Ok(true);
@@ -220,7 +313,13 @@ impl RedirectionMonitor {
         Ok(false)
     }
 
-    fn handle_access(&self, req: &ScmpNotifReq, notif_fd: RawFd, path_arg: usize, mode_arg: usize) -> Result<bool> {
+    fn handle_access(
+        &self,
+        req: &ScmpNotifReq,
+        notif_fd: RawFd,
+        path_arg: usize,
+        mode_arg: usize,
+    ) -> Result<bool> {
         let path = read_process_path(req.pid, req.data.args[path_arg])?;
         if let Some(relative) = self.get_redirection_path(&path) {
             match &self.bundle_root {
@@ -229,7 +328,9 @@ impl RedirectionMonitor {
                     if redirected.exists() {
                         debug!("Redirecting access {:?} to bundled file", path);
                         let mode = req.data.args[mode_arg] as i32;
-                        let res = unsafe { libc::access(CString::new(redirected.to_str().unwrap())?.as_ptr(), mode) };
+                        let res = unsafe {
+                            libc::access(CString::new(redirected.to_str().unwrap())?.as_ptr(), mode)
+                        };
                         let errno = if res == -1 { Errno::last_raw() } else { 0 };
                         let resp = ScmpNotifResp::new(req.id, res as i64, (-errno).into(), 0);
                         resp.respond(notif_fd)?;
@@ -249,7 +350,15 @@ impl RedirectionMonitor {
         Ok(false)
     }
 
-    fn handle_accessat(&self, req: &ScmpNotifReq, notif_fd: RawFd, _dirfd_arg: usize, path_arg: usize, mode_arg: usize, flags_arg: usize) -> Result<bool> {
+    fn handle_accessat(
+        &self,
+        req: &ScmpNotifReq,
+        notif_fd: RawFd,
+        _dirfd_arg: usize,
+        path_arg: usize,
+        mode_arg: usize,
+        flags_arg: usize,
+    ) -> Result<bool> {
         let path = read_process_path(req.pid, req.data.args[path_arg])?;
         if path.is_absolute() {
             if let Some(relative) = self.get_redirection_path(&path) {
@@ -260,7 +369,14 @@ impl RedirectionMonitor {
                             debug!("Redirecting accessat {:?} to bundled file", path);
                             let mode = req.data.args[mode_arg] as i32;
                             let flags = req.data.args[flags_arg] as i32;
-                            let res = unsafe { libc::faccessat(libc::AT_FDCWD, CString::new(redirected.to_str().unwrap())?.as_ptr(), mode, flags) };
+                            let res = unsafe {
+                                libc::faccessat(
+                                    libc::AT_FDCWD,
+                                    CString::new(redirected.to_str().unwrap())?.as_ptr(),
+                                    mode,
+                                    flags,
+                                )
+                            };
                             let errno = if res == -1 { Errno::last_raw() } else { 0 };
                             let resp = ScmpNotifResp::new(req.id, res as i64, (-errno).into(), 0);
                             resp.respond(notif_fd)?;
@@ -282,8 +398,10 @@ impl RedirectionMonitor {
     }
 
     fn get_redirection_path(&self, path: &Path) -> Option<PathBuf> {
-        if !path.is_absolute() { return None; }
-        
+        if !path.is_absolute() {
+            return None;
+        }
+
         if self.prefer_host.contains(path) && path.exists() {
             debug!("Preferring host version for {:?}", path);
             return None;
@@ -296,8 +414,8 @@ impl RedirectionMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::collections::HashSet;
+    use tempfile::tempdir;
 
     #[test]
     fn test_get_redirection_path_prefer_host() {
@@ -309,6 +427,9 @@ mod tests {
         let monitor = RedirectionMonitor::new_with_root(1234, BundleRoot::TempDir(temp), prefer);
 
         assert_eq!(monitor.get_redirection_path(&test_path), None);
-        assert_eq!(monitor.get_redirection_path(Path::new("/bin/ls")), Some(PathBuf::from("bin/ls")));
+        assert_eq!(
+            monitor.get_redirection_path(Path::new("/bin/ls")),
+            Some(PathBuf::from("bin/ls"))
+        );
     }
 }

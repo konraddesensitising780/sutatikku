@@ -1,10 +1,10 @@
-use std::process::Command;
 use std::fs;
 use std::io::Write;
-use tempfile::tempdir;
-use std::time::Duration;
-use std::sync::mpsc;
 use std::path::Path;
+use std::process::Command;
+use std::sync::mpsc;
+use std::time::Duration;
+use tempfile::tempdir;
 
 fn run_with_timeout<F: FnOnce() + Send + 'static>(dur: Duration, f: F) {
     let (tx, rx) = mpsc::channel();
@@ -22,7 +22,11 @@ fn test_basic_bundling_ls_tempdir() {
         let temp = tempdir().unwrap();
         let output_bin = temp.path().join("myls");
 
-        let input_bin = if fs::metadata("/bin/ls").is_ok() { "/bin/ls" } else { "/usr/bin/ls" };
+        let input_bin = if fs::metadata("/bin/ls").is_ok() {
+            "/bin/ls"
+        } else {
+            "/usr/bin/ls"
+        };
         println!("Bundling {} with --use-tempdir", input_bin);
 
         let status = Command::new(sutatikku_bin)
@@ -53,7 +57,11 @@ fn test_in_memory_bundling_cat_default() {
         let temp = tempdir().unwrap();
         let output_bin = temp.path().join("mycat_mem");
 
-        let input_bin = if fs::metadata("/bin/cat").is_ok() { "/bin/cat" } else { "/usr/bin/cat" };
+        let input_bin = if fs::metadata("/bin/cat").is_ok() {
+            "/bin/cat"
+        } else {
+            "/usr/bin/cat"
+        };
         println!("Bundling {} (default memfd)", input_bin);
 
         let status = Command::new(sutatikku_bin)
@@ -68,7 +76,10 @@ fn test_in_memory_bundling_cat_default() {
         assert!(output_bin.exists());
 
         let test_file = temp.path().join("hello.txt");
-        fs::File::create(&test_file).unwrap().write_all(b"Hello from memory bundle!").unwrap();
+        fs::File::create(&test_file)
+            .unwrap()
+            .write_all(b"Hello from memory bundle!")
+            .unwrap();
 
         let output = Command::new(&output_bin)
             .arg(&test_file)
@@ -76,7 +87,10 @@ fn test_in_memory_bundling_cat_default() {
             .expect("Failed to run bundled cat");
 
         assert!(output.status.success());
-        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "Hello from memory bundle!");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "Hello from memory bundle!"
+        );
     });
 }
 
@@ -87,8 +101,12 @@ fn test_resource_bundling_cat() {
         let temp = tempdir().unwrap();
         let output_bin = temp.path().join("mycat_with_res");
 
-        let input_bin = if fs::metadata("/bin/cat").is_ok() { "/bin/cat" } else { "/usr/bin/cat" };
-        
+        let input_bin = if fs::metadata("/bin/cat").is_ok() {
+            "/bin/cat"
+        } else {
+            "/usr/bin/cat"
+        };
+
         let resource_file = temp.path().join("fake_foo");
         fs::write(&resource_file, "fake foo!").unwrap();
 
@@ -121,8 +139,12 @@ fn test_yaml_config_bundling() {
         let temp = tempdir().unwrap();
         let output_bin = temp.path().join("mycat_config");
 
-        let input_bin = if fs::metadata("/bin/cat").is_ok() { "/bin/cat" } else { "/usr/bin/cat" };
-        
+        let input_bin = if fs::metadata("/bin/cat").is_ok() {
+            "/bin/cat"
+        } else {
+            "/usr/bin/cat"
+        };
+
         let resource_file = temp.path().join("fake_bar");
         fs::write(&resource_file, "fake bar!").unwrap();
 
@@ -162,8 +184,12 @@ fn test_prefer_host_redirection() {
         let temp = tempdir().unwrap();
         let output_bin = temp.path().join("mycat_prefer_host");
 
-        let input_bin = if fs::metadata("/bin/cat").is_ok() { "/bin/cat" } else { "/usr/bin/cat" };
-        
+        let input_bin = if fs::metadata("/bin/cat").is_ok() {
+            "/bin/cat"
+        } else {
+            "/usr/bin/cat"
+        };
+
         let host_file = temp.path().join("runtime_file.txt");
         fs::write(&host_file, "host version").unwrap();
 
@@ -196,7 +222,10 @@ fn test_prefer_host_redirection() {
             .expect("Failed to run bundled binary");
 
         assert!(output.status.success());
-        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "host version");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "host version"
+        );
     });
 }
 
@@ -207,8 +236,12 @@ fn test_entry_default_args() {
         let temp = tempdir().unwrap();
         let output_bin = temp.path().join("mycat_with_args");
 
-        let input_bin = if fs::metadata("/bin/cat").is_ok() { "/bin/cat" } else { "/usr/bin/cat" };
-        
+        let input_bin = if fs::metadata("/bin/cat").is_ok() {
+            "/bin/cat"
+        } else {
+            "/usr/bin/cat"
+        };
+
         let test_file = temp.path().join("args_test.txt");
         fs::write(&test_file, "args working").unwrap();
 
@@ -236,7 +269,10 @@ fn test_entry_default_args() {
             .expect("Failed to run bundled binary");
 
         assert!(output.status.success());
-        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "args working");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "args working"
+        );
     });
 }
 
@@ -247,9 +283,13 @@ fn test_explicit_library_inclusion() {
         let temp = tempdir().unwrap();
         let output_bin = temp.path().join("mycat_with_libs");
 
-        let input_bin = if fs::metadata("/bin/cat").is_ok() { "/bin/cat" } else { "/usr/bin/cat" };
+        let input_bin = if fs::metadata("/bin/cat").is_ok() {
+            "/bin/cat"
+        } else {
+            "/usr/bin/cat"
+        };
         let libselinux = "/lib/x86_64-linux-gnu/libselinux.so.1";
-        
+
         if !Path::new(libselinux).exists() {
             return;
         }
@@ -282,7 +322,11 @@ fn test_config_generation_simple() {
         let temp = tempdir().unwrap();
         let config_out = temp.path().join("gen_config.yaml");
 
-        let input_bin = if fs::metadata("/bin/ls").is_ok() { "/bin/ls" } else { "/usr/bin/ls" };
+        let input_bin = if fs::metadata("/bin/ls").is_ok() {
+            "/bin/ls"
+        } else {
+            "/usr/bin/ls"
+        };
 
         let status = Command::new(sutatikku_bin)
             .arg("gen-config")
@@ -310,10 +354,14 @@ fn test_config_generation_recording() {
         let temp = tempdir().unwrap();
         let config_out = temp.path().join("recorded_config.yaml");
 
-        let input_bin = if fs::metadata("/bin/cat").is_ok() { "/bin/cat" } else { "/usr/bin/cat" };
+        let input_bin = if fs::metadata("/bin/cat").is_ok() {
+            "/bin/cat"
+        } else {
+            "/usr/bin/cat"
+        };
         let test_file = temp.path().join("to_be_recorded.txt");
         fs::write(&test_file, "record me!").unwrap();
-        
+
         let non_existent = temp.path().join("does_not_exist.txt");
 
         let status = Command::new(sutatikku_bin)
@@ -324,7 +372,7 @@ fn test_config_generation_recording() {
             .arg("--record")
             .arg("--")
             .arg(&test_file)
-            .arg(&non_existent) 
+            .arg(&non_existent)
             .status()
             .expect("Failed to run sutatikku gen-config --record");
 
@@ -334,14 +382,24 @@ fn test_config_generation_recording() {
         let content = fs::read_to_string(&config_out).unwrap();
         let yaml: serde_yaml::Value = serde_yaml::from_str(&content).unwrap();
         let files = yaml["files"].as_sequence().unwrap();
-        
-        let file_paths: Vec<String> = files.iter().map(|f| f.as_str().unwrap_or_else(|| f["path"].as_str().unwrap()).to_string()).collect();
-        
+
+        let file_paths: Vec<String> = files
+            .iter()
+            .map(|f| {
+                f.as_str()
+                    .unwrap_or_else(|| f["path"].as_str().unwrap())
+                    .to_string()
+            })
+            .collect();
+
         assert!(file_paths.contains(&test_file.to_str().unwrap().to_string()));
         assert!(!file_paths.contains(&non_existent.to_str().unwrap().to_string()));
-        
+
         let mut sorted_paths = file_paths.clone();
         sorted_paths.sort();
-        assert_eq!(file_paths, sorted_paths, "Files should be sorted alphabetically");
+        assert_eq!(
+            file_paths, sorted_paths,
+            "Files should be sorted alphabetically"
+        );
     });
 }

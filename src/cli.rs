@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 #[derive(Parser)]
-#[command(name = "sutatikku", about = "Turn dynamically linked ELF binaries into standalone executables")]
+#[command(
+    name = "sutatikku",
+    about = "Turn dynamically linked ELF binaries into standalone executables"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -19,13 +22,22 @@ pub enum Commands {
         #[arg(short, long, help = "Output path for the self-contained binary")]
         output: PathBuf,
 
-        #[arg(long, help = "Entry point within the bundle (defaults to the input binary)")]
+        #[arg(
+            long,
+            help = "Entry point within the bundle (defaults to the input binary)"
+        )]
         entry: Option<PathBuf>,
 
-        #[arg(long, help = "Extract files to a temporary directory instead of serving from memory")]
+        #[arg(
+            long,
+            help = "Extract files to a temporary directory instead of serving from memory"
+        )]
         use_tempdir: bool,
 
-        #[arg(long, help = "Additional files to include in the bundle (format: source[:dest])")]
+        #[arg(
+            long,
+            help = "Additional files to include in the bundle (format: source[:dest])"
+        )]
         files: Vec<FileMapping>,
 
         #[arg(short, long, help = "Path to a YAML configuration file")]
@@ -48,7 +60,11 @@ pub enum Commands {
         #[arg(short, long, help = "Output path for the generated YAML config")]
         output: PathBuf,
 
-        #[arg(long, help = "Analyze and include all resolved libraries in the config", default_value_t = true)]
+        #[arg(
+            long,
+            help = "Analyze and include all resolved libraries in the config",
+            default_value_t = true
+        )]
         analyze_libs: bool,
 
         #[arg(long, help = "Execute the command and record all file open operations")]

@@ -1,14 +1,14 @@
 mod builder;
 mod cli;
-mod runner;
 mod monitor;
+mod runner;
 mod seccomp;
 mod sys_util;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use builder::Builder;
 use clap::Parser;
 use cli::{Cli, Commands};
-use builder::Builder;
 use log::info;
 use runner::Runner;
 use std::collections::HashSet;
@@ -23,12 +23,12 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
     match cli.command {
-        Commands::Build { 
-            input, 
-            output, 
-            entry, 
-            use_tempdir, 
-            files, 
+        Commands::Build {
+            input,
+            output,
+            entry,
+            use_tempdir,
+            files,
             config,
             env,
             prefer_host,
@@ -37,7 +37,9 @@ fn main() -> Result<()> {
             let mut builder = if let Some(config_path) = config {
                 Builder::from_yaml(&config_path, output)?
             } else {
-                let entry_path = entry.or(input).ok_or_else(|| anyhow!("No input or entry specified"))?;
+                let entry_path = entry
+                    .or(input)
+                    .ok_or_else(|| anyhow!("No input or entry specified"))?;
                 Builder::new(entry_path, output, use_tempdir)
             };
 
@@ -59,10 +61,19 @@ fn main() -> Result<()> {
             builder.build()?;
             info!("Successfully built standalone binary.");
         }
-        Commands::GenConfig { input, output, analyze_libs, record, prefer_host, ignore, args } => {
+        Commands::GenConfig {
+            input,
+            output,
+            analyze_libs,
+            record,
+            prefer_host,
+            ignore,
+            args,
+        } => {
             let p_host = prefer_host.map(|v| v.into_iter().collect::<HashSet<_>>());
             let i_paths = ignore.map(|v| v.into_iter().collect::<HashSet<_>>());
-            let config = Builder::generate_config(input, analyze_libs, record, &args, p_host, i_paths)?;
+            let config =
+                Builder::generate_config(input, analyze_libs, record, &args, p_host, i_paths)?;
             let content = serde_yaml::to_string(&config)?;
             std::fs::write(&output, content)?;
             info!("Successfully generated config file at {:?}", output);

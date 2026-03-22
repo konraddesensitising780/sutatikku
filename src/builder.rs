@@ -1,13 +1,13 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use log::debug;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tar::Builder as TarBuilder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use serde::{Serialize, Deserialize};
-use log::debug;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BundleConfig {
@@ -100,9 +100,9 @@ pub const DEFAULT_IGNORE_PATHS: &[&str] = &[
 ];
 
 use crate::monitor::RecordingMonitor;
-use crate::seccomp::{setup_seccomp_hook, run_seccomp_monitor};
-use nix::unistd::{fork, ForkResult};
+use crate::seccomp::{run_seccomp_monitor, setup_seccomp_hook};
 use nix::sys::wait::waitpid;
+use nix::unistd::{fork, ForkResult};
 use std::os::fd::{AsFd, AsRawFd};
 use std::os::unix::process::CommandExt;
 
@@ -135,7 +135,10 @@ impl Builder {
             ForkResult::Parent { child } => {
                 drop(child_sock);
                 let fds = parent_sock.recv_fd()?;
-                let notif_fd = fds.into_iter().next().ok_or_else(|| anyhow!("No FD received"))?;
+                let notif_fd = fds
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| anyhow!("No FD received"))?;
                 parent_sock.ping()?;
 
                 let monitor = std::sync::Arc::new(RecordingMonitor::new(child.as_raw() as u32));
@@ -146,10 +149,12 @@ impl Builder {
                 });
 
                 let _ = waitpid(child, None)?;
-                
+
                 let paths = std::sync::Arc::try_unwrap(monitor)
                     .map_err(|_| anyhow!("Arc unwrap failed"))?
-                    .opened_paths.into_inner().unwrap();
+                    .opened_paths
+                    .into_inner()
+                    .unwrap();
                 Ok(paths)
             }
         }
@@ -163,16 +168,30 @@ impl Builder {
         self.ignore_paths.contains(path)
     }
 
-    pub fn generate_config(input: PathBuf, analyze_libs: bool, record: bool, record_args: &[String], prefer_host_override: Option<HashSet<PathBuf>>, ignore_override: Option<HashSet<PathBuf>>) -> Result<ConfigYaml> {
+    pub fn generate_config(
+        input: PathBuf,
+        analyze_libs: bool,
+        record: bool,
+        record_args: &[String],
+        prefer_host_override: Option<HashSet<PathBuf>>,
+        ignore_override: Option<HashSet<PathBuf>>,
+    ) -> Result<ConfigYaml> {
         let input_abs = to_absolute(&input)
             .with_context(|| format!("Failed to resolve input path {:?}", input))?;
-        
+
         let mut dummy = Self::new(input_abs.clone(), PathBuf::new(), false);
-        if let Some(p) = prefer_host_override { dummy.set_prefer_host(p); }
-        if let Some(i) = ignore_override { dummy.set_ignore_paths(i); }
+        if let Some(p) = prefer_host_override {
+            dummy.set_prefer_host(p);
+        }
+        if let Some(i) = ignore_override {
+            dummy.set_ignore_paths(i);
+        }
 
         let mut yaml = ConfigYaml {
-            entry: Some(EntryConfig { path: input_abs.clone(), args: None }),
+            entry: Some(EntryConfig {
+                path: input_abs.clone(),
+                args: None,
+            }),
             files: None,
             use_tempdir: None,
             env: None,
@@ -201,20 +220,23 @@ impl Builder {
         if !file_set.is_empty() {
             let mut paths: Vec<_> = file_set.into_iter().collect();
             paths.sort();
-            
-            let entries = paths.into_iter().map(|p| {
-                let is_prefer = dummy.prefer_host.contains(&p);
-                if is_prefer {
-                    FileEntry::Full(FileSpec {
-                        path: p,
-                        map_to: None,
-                        prefer_host: true,
-                    })
-                } else {
-                    FileEntry::Simple(p)
-                }
-            }).collect();
-            
+
+            let entries = paths
+                .into_iter()
+                .map(|p| {
+                    let is_prefer = dummy.prefer_host.contains(&p);
+                    if is_prefer {
+                        FileEntry::Full(FileSpec {
+                            path: p,
+                            map_to: None,
+                            prefer_host: true,
+                        })
+                    } else {
+                        FileEntry::Simple(p)
+                    }
+                })
+                .collect();
+
             yaml.files = Some(entries);
         }
 
@@ -257,7 +279,11 @@ impl Builder {
     }
 
     pub fn add_file(&mut self, source: PathBuf, dest: PathBuf, prefer_host: bool) {
-        self.extra_files.push(ExtraFile { source, dest, prefer_host });
+        self.extra_files.push(ExtraFile {
+            source,
+            dest,
+            prefer_host,
+        });
     }
 
     pub fn add_env(&mut self, env: String) {
@@ -267,13 +293,15 @@ impl Builder {
     pub fn from_yaml(config_path: &Path, output: PathBuf) -> Result<Self> {
         let content = fs::read_to_string(config_path)?;
         let yaml: ConfigYaml = serde_yaml::from_str(&content)?;
-        
-        let entry_config = yaml.entry.ok_or_else(|| anyhow!("Entry path is missing in config"))?;
+
+        let entry_config = yaml
+            .entry
+            .ok_or_else(|| anyhow!("Entry path is missing in config"))?;
         let mut builder = Self::new(entry_config.path, output, yaml.use_tempdir.unwrap_or(false));
         if let Some(args) = entry_config.args {
             builder.set_entry_args(args);
         }
-        
+
         if let Some(files) = yaml.files {
             for f in files {
                 match f {
@@ -297,14 +325,14 @@ impl Builder {
                 builder.add_env(e);
             }
         }
-        
+
         Ok(builder)
     }
 
     pub fn build(&self) -> Result<()> {
         let entry_abs = to_absolute(&self.entry)
             .with_context(|| format!("Failed to resolve entry path {:?}", self.entry))?;
-        
+
         let mut all_deps = HashSet::new();
         let mut interpreter = None;
         let mut prefer_host_paths = self.prefer_host.clone();
@@ -332,7 +360,7 @@ impl Builder {
                 prefer_host_paths.insert(extra.dest.clone());
             }
         }
-        
+
         let mut bundle_data = Vec::new();
         {
             let mut encoder = GzEncoder::new(&mut bundle_data, Compression::default());
@@ -384,7 +412,7 @@ impl Builder {
 
         use std::io::Write;
         out_file.write_all(&bundle_data)?;
-        
+
         let footer = (bundle_data.len() as u64).to_le_bytes();
         out_file.write_all(&footer)?;
         out_file.write_all(b"SUTATIKU")?;
@@ -401,7 +429,10 @@ impl Builder {
         Ok(())
     }
 
-    pub fn resolve_dependencies_recursive(&self, binary: &Path) -> Result<(HashSet<PathBuf>, Option<PathBuf>)> {
+    pub fn resolve_dependencies_recursive(
+        &self,
+        binary: &Path,
+    ) -> Result<(HashSet<PathBuf>, Option<PathBuf>)> {
         let mut all_deps = HashSet::new();
         let mut queue = vec![to_absolute(binary)?];
         let mut interpreter = None;
@@ -419,7 +450,9 @@ impl Builder {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
                 let line = line.trim();
-                if line.is_empty() { continue; }
+                if line.is_empty() {
+                    continue;
+                }
 
                 let mut path = None;
                 if let Some(arrow_idx) = line.find("=>") {
@@ -461,20 +494,31 @@ mod tests {
 
     #[test]
     fn test_resolve_dependencies_recursive() {
-        let input_bin = if fs::metadata("/bin/ls").is_ok() { "/bin/ls" } else { "/usr/bin/ls" };
+        let input_bin = if fs::metadata("/bin/ls").is_ok() {
+            "/bin/ls"
+        } else {
+            "/usr/bin/ls"
+        };
         let builder = Builder::new(PathBuf::from(input_bin), PathBuf::from("output"), false);
-        let (deps, interpreter) = builder.resolve_dependencies_recursive(Path::new(input_bin)).unwrap();
+        let (deps, interpreter) = builder
+            .resolve_dependencies_recursive(Path::new(input_bin))
+            .unwrap();
         assert!(!deps.is_empty());
         assert!(interpreter.is_some());
-        
+
         let has_libc = deps.iter().any(|p| p.to_string_lossy().contains("libc.so"));
         assert!(has_libc, "Should have found libc in dependencies");
 
         let libselinux = Path::new("/lib/x86_64-linux-gnu/libselinux.so.1");
         if libselinux.exists() {
             let (selinux_deps, _) = builder.resolve_dependencies_recursive(libselinux).unwrap();
-            let has_pcre = selinux_deps.iter().any(|p| p.to_string_lossy().contains("libpcre2"));
-            assert!(has_pcre, "Should have found libpcre2 as a dependency of libselinux");
+            let has_pcre = selinux_deps
+                .iter()
+                .any(|p| p.to_string_lossy().contains("libpcre2"));
+            assert!(
+                has_pcre,
+                "Should have found libpcre2 as a dependency of libselinux"
+            );
         }
     }
 }
