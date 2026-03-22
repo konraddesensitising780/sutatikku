@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bytemuck::NoUninit;
 use libseccomp::{ScmpNotifReq, ScmpNotifResp, ScmpNotifRespFlags};
-use log::{debug, error, warn};
+use log::{debug, warn};
 use nix::errno::Errno;
 use std::ffi::CString;
 use std::os::fd::{AsRawFd, RawFd};
@@ -114,21 +114,9 @@ impl RedirectionMonitor {
             self.handle_access(req, notif_fd, 0, 1)
         } else if nr == libc::SYS_faccessat || nr == libc::SYS_faccessat2 {
             self.handle_accessat(req, notif_fd, 0, 1, 2, 3)
-        } else if nr == libc::SYS_getdents || nr == libc::SYS_getdents64 {
-            self.handle_getdents(req, notif_fd)
         } else {
             Ok(false)
         }
-    }
-
-    fn handle_getdents(&self, req: &ScmpNotifReq, notif_fd: RawFd) -> Result<bool> {
-        if let BundleRoot::InMemory(_) = &self.bundle_root {
-            error!("Blocking getdents for in-memory bundle (not implemented)");
-            let resp = ScmpNotifResp::new_error(req.id, -libc::ENOSYS, ScmpNotifRespFlags::empty());
-            resp.respond(notif_fd)?;
-            return Ok(true);
-        }
-        Ok(false)
     }
 
     fn handle_open(

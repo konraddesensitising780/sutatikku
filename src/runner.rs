@@ -107,8 +107,6 @@ impl Runner {
                     libc::SYS_access as i32,
                     libc::SYS_faccessat as i32,
                     libc::SYS_faccessat2 as i32,
-                    libc::SYS_getdents as i32,
-                    libc::SYS_getdents64 as i32,
                 ];
 
                 let notif_fd = setup_seccomp_hook(&syscalls_to_hook)?;
