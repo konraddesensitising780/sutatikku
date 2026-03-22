@@ -96,7 +96,7 @@ impl RedirectionMonitor {
             Err(e) => {
                 warn!("Error handling syscall: {:?}", e);
                 let resp =
-                    ScmpNotifResp::new_error(req.id, libc::EINVAL, ScmpNotifRespFlags::empty());
+                    ScmpNotifResp::new_error(req.id, -libc::EINVAL, ScmpNotifRespFlags::empty());
                 let _ = resp.respond(notif_fd);
             }
         }
@@ -124,7 +124,7 @@ impl RedirectionMonitor {
     fn handle_getdents(&self, req: &ScmpNotifReq, notif_fd: RawFd) -> Result<bool> {
         if let BundleRoot::InMemory(_) = &self.bundle_root {
             error!("Blocking getdents for in-memory bundle (not implemented)");
-            let resp = ScmpNotifResp::new_error(req.id, libc::ENOSYS, ScmpNotifRespFlags::empty());
+            let resp = ScmpNotifResp::new_error(req.id, -libc::ENOSYS, ScmpNotifRespFlags::empty());
             resp.respond(notif_fd)?;
             return Ok(true);
         }
