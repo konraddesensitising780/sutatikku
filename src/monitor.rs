@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bytemuck::NoUninit;
 use libseccomp::{ScmpNotifReq, ScmpNotifResp, ScmpNotifRespFlags};
-use log::{debug, warn};
+use log::{debug, error, warn};
 use nix::errno::Errno;
 use std::ffi::CString;
 use std::os::fd::{AsRawFd, RawFd};
@@ -123,7 +123,7 @@ impl RedirectionMonitor {
 
     fn handle_getdents(&self, req: &ScmpNotifReq, notif_fd: RawFd) -> Result<bool> {
         if let BundleRoot::InMemory(_) = &self.bundle_root {
-            debug!("Blocking getdents for in-memory bundle (not implemented)");
+            error!("Blocking getdents for in-memory bundle (not implemented)");
             let resp = ScmpNotifResp::new_error(req.id, libc::ENOSYS, ScmpNotifRespFlags::empty());
             resp.respond(notif_fd)?;
             return Ok(true);
